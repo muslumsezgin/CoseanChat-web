@@ -3,73 +3,24 @@ import ReactDOM from 'react-dom';
 import './Chat.css';
 import {emit} from "./WebSocketHelper";
 
-var address = require('address');
-
-/*const defaultMess = [
-    {
-        text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-        me: true
-    },
-    {
-        text: 'Maecenas erat justo, vehicula quis pretium vitae, dignissim eget ante. Aliquam malesuada vitae felis ut dictum. ',
-        me: false
-    },
-    {
-        text: 'Morbi vitae purus ac quam vestibulum eleifend eu vitae orci. Etiam id tempor mauris. Quisque tristique, enim pellentesque blandit tristique, mauris tortor ullamcorper turpis, non vehicula nunc neque nec justo. Aliquam blandit sed nisl sit amet dignissim.',
-        me: false
-    },
-    {
-        text: 'Curabitur sem dui, molestie a nunc a, suscipit aliquet risus. Nulla arcu enim, venenatis ac lectus non, mollis cursus ligula. Nulla et eros felis. Etiam malesuada eu sapien ac gravida. Aliquam vulputate, ante id fermentum hendrerit, ligula nulla tempus dolor, sit amet dictum erat nulla a nibh.',
-        me: true
-    },
-    {
-        text: 'Ut rhoncus sit amet elit et volutpat. Phasellus id porta est. Ut lectus nibh, venenatis non commodo ut, elementum et mauris.',
-        me: false
-    },
-    {
-        text: 'Aliquam nec volutpat ipsum. Donec placerat augue et urna malesuada auctor.',
-        me: false
-    },
-    {
-        text: 'Aliquam quis augue vitae tellus convallis eleifend. Pellentesque sed posuere dui. Vivamus suscipit dignissim nunc, quis bibendum sapien placerat ac.',
-        me: true
-    },
-    {
-        text: 'Cras commodo arcu.',
-        me: false
-    },
-    {
-        text: 'sorry.',
-        me: false
-    },
-    {
-        text: 'wtf :/',
-        me: true
-    },
-];*/
-
-const VisibleType = {
-    LOCK: 0,
-    INACTIVE: 1,
-    ONLINE: 2,
-    PENDING: 3,
-};
-
 class App extends Component {
 
     state = {
-        my_ip:'',
+        my_ip: '',
         my_info: null,
         img: '',
         file: null,
         talkId: 0,
         value: '',
+        notificationSet: [],
         onlineSet: [],
         pendingSet: [],
         requestSet: [],
         confirmSet: [],
-        userList: {}
-
+        userSet: {},
+        messageList: {'s': []},
+        globalSocket: null,
+        messageSocket: null,
     };
 
     scrollToBottom = () => {
@@ -87,156 +38,231 @@ class App extends Component {
         this.scrollToBottom();
     }
 
-    componentWillMount(){
-
-    }
-
     _send() {
-        const {value, talkId, userList} = this.state;
-        /*if (talkId !== 0 && userList[talkId].status === VisibleType.ONLINE && value.trim()) {
-            this.setState({
-                userList: {
-                    ...userList,
-                    [talkId]: {
-                        ...userList[talkId],
-                        messages: [...userList[talkId].messages, {text: this.state.value, me: true}]
-                    }
-                },
-                value: ''
-            })
-        }*/
+        const {value, talkId, my_ip, confirmSet, onlineSet, messageSocket} = this.state;
+        if (talkId !== my_ip && onlineSet.find(e => e === talkId) && confirmSet.find(e => e === talkId) && value.trim()) {
+            this.setState({value: ''}, () => messageSocket.send(JSON.stringify({
+                from: my_ip,
+                to: talkId,
+                content: value
+            })))
+        }
     }
 
     register = () => {
-        this.setState({loading: true});
         let payload = {};
         payload.method = 'POST';
         payload.headers = {'Content-Type': 'application/json'};
         payload.body = JSON.stringify(this.state.my_info);
-        // fetch('http://127.0.0.1:9093/api/v1/user', payload)
-        fetch('http://192.168.43.231:9093/api/v1/user', payload)
-            .then(res => res.text()).then(e => this.setState({my_ip:e, talkId:e},
-            () => emit("ws://192.168.43.231:9093/api/online/", this.state.my_ip, (item)=>this.setFunc(item))))
-            .catch(err => console.log("hata"))
+        fetch('http://192.168.43.48:9093/api/v1/user', payload).then(res => res.text()).then(e => {
+            this.setState({
+                my_ip: e, talkId: e,
+                globalSocket: emit("ws://192.168.43.48:9093/api/online/" + e, (item) => this.setState({...item})),
+                messageSocket: emit("ws://192.168.43.48:9093/api/chat?ip=" + e, (mes) => {
+                    const ip = mes.to === this.state.my_ip ? mes.from : mes.to;
+                    const notification = ip !== this.state.talkId;
+                    const messageList = {
+                        ...this.state.messageList,
+                        [ip]: this.state.messageList[ip] !== undefined ? [...this.state.messageList[ip], mes] : [mes]
+                    };
+                    const notificationSet = notification ? [...this.state.notificationSet, ip] : this.state.notificationSet;
+                    this.setState({messageList, notificationSet})
+                })
+            })
+        }).catch(err => this.setState({my_info: null}))
+    }
 
+    pictureUpload = (file) => {
+        var data = new FormData()
+        data.append('file', file)
+        let payload = {};
+        payload.method = 'POST';
+        payload.headers = {};
+        payload.body = data;
+        fetch('http://192.168.43.48:9093/api/v1/upload', payload).then(res => res.text()).then(e => this.setState({img: e}))
+            .catch(err => this.setState({my_info: null}))
+    }
+
+    request = (ownIp) => {
+        let payload = {};
+        payload.method = 'POST';
+        payload.headers = {'Content-Type': 'application/json'};
+        payload.body = JSON.stringify({ip: ownIp});
+        fetch('http://192.168.43.48:9093/api/v1/user/request', payload)
+            .then(e => e.status === 200 && this.setState({requestSet: [...this.state.requestSet, ownIp]}))
+            .catch(err => console.log("hata"))
+    }
+
+    confirm = (ownIp) => {
+        let payload = {};
+        payload.method = 'POST';
+        payload.headers = {'Content-Type': 'application/json'};
+        payload.body = JSON.stringify({ip: ownIp});
+        fetch('http://192.168.43.48:9093/api/v1/user/confirm', payload)
+            .then(e => e.status === 200 && this.setState({confirmSet: [...this.state.requestSet, ownIp]}))
+            .catch(err => console.log("hata"))
+    }
+
+    logout() {
+        this.state.globalSocket && this.state.globalSocket.close();
+        this.setState({my_info: null})
     }
 
     renderContent() {
-        const {talkId, userList, my_info, onlineSet, pendingSet, requestSet, confirmSet, my_ip} = this.state;
+        const {talkId, userSet, my_info, onlineSet, pendingSet, requestSet, confirmSet, my_ip, messageList} = this.state;
         const selected = talkId !== my_ip;
         if (selected) {
-            const person = userList[talkId];
+            const person = userSet[talkId];
             const online = onlineSet.find(item => item === talkId);
             if (online) {
                 if (confirmSet.find(item => item === talkId)) {
-                    return person.messages.length === 0 ? <div className='my-page'>
-                        <img className='profile-image' alt={person.name} src={person.img}/>
-                        <h1 className='my-text'>{person.name}</h1>
-                        <label>Hadi {person.name} için bir mesaj yaz...</label>
-                    </div> : person.messages.map(e => <div
-                        className={e.me ? 'messages-li-me' : 'messages-li'}>{e.text}</div>)
+                    const talkMessages = messageList[Object.keys(messageList).find(item => item === talkId)];
+                    const messages = talkMessages ? talkMessages : [];
+                    return messages.length === 0 ? <div className='my-page'>
+                        {person.profilePicture ?
+                            <img className='profile-image' alt={person.nickName} src={person.profilePicture}/> :
+                            <h2 className='profile-image-large large-name'>{person.nickName.charAt(0).toUpperCase()}</h2>}
+                        <h1 className='my-text'>{person.nickName}</h1>
+                        <label>Hadi {person.nickName} için bir mesaj yaz...</label>
+                    </div> : messages.map((e, i) =>
+                        <div key={i} className={e.from === my_ip ? 'messages-li-me' : 'messages-li'}>{e.content}</div>)
                 } else if (requestSet.find(item => item === talkId)) {
                     return <div className='my-page'>
-                        <img className='profile-image' alt={person.name} src={person.img}/>
-                        <h1 className='my-text'>{person.name}</h1>
-                        <label>{person.name} kullanıcısına konuşma isteği gönderildi. Kabul ettikten sonra doya doya
-                            sohbet
-                            edebilirsin.</label>
+                        {person.profilePicture ?
+                            <img className='profile-image' alt={person.nickName} src={person.profilePicture}/> :
+                            <h2 className='profile-image-large large-name'>{person.nickName.charAt(0).toUpperCase()}</h2>}
+                        <h1 className='my-text'>{person.nickName}</h1>
+                        <label>{person.nickName} kullanıcısına konuşma isteği gönderildi. Kabul ettikten sonra doya doya
+                            sohbet edebilirsin.</label>
                     </div>
                 } else if (pendingSet.find(item => item === talkId)) {
                     return <div className='my-page'>
-                        <img className='profile-image' alt={person.name} src={person.img}/>
-                        <h1 className='my-text'>{person.name}</h1>
-                        <label>{person.name} kullanıcısından isteğin var. Kabul ettikten sonra doya doya
-                            sohbet
+                        {person.profilePicture ?
+                            <img className='profile-image' alt={person.nickName} src={person.profilePicture}/> :
+                            <h2 className='profile-image-large large-name'>{person.nickName.charAt(0).toUpperCase()}</h2>}
+                        <h1 className='my-text'>{person.nickName}</h1>
+                        <label>{person.nickName} kullanıcısından isteğin var. Kabul ettikten sonra doya doya sohbet
                             edebilirsin.</label>
+                        <button className="pending" onClick={() => this.confirm(talkId)}>Onayla</button>
                     </div>
                 } else {
                     return <div className='my-page'>
-                        <img className='profile-image' alt={person.name} src={person.img}/>
-                        <h1 className='my-text'>{person.name}</h1>
-                        <label>Hadi ne bekliyorsun! {person.name} kullanıcısına konuşma isteği göndermek için butona
+                        {person.profilePicture ?
+                            <img className='profile-image' alt={person.nickName} src={person.profilePicture}/> :
+                            <h2 className='profile-image-large large-name'>{person.nickName.charAt(0).toUpperCase()}</h2>}
+                        <h1 className='my-text'>{person.nickName}</h1>
+                        <label>Hadi ne bekliyorsun! {person.nickName} kullanıcısına konuşma isteği göndermek için butona
                             tıkla.</label>
-                        <button className="pending">Click me</button>
+                        <button className="pending" onClick={() => this.request(talkId)}>İstek At</button>
                     </div>
                 }
+            } else {
+                return <div className='my-page'>
+                    {person && person.profilePicture && person.nickName &&
+                    <img className='profile-image' alt={person.nickName} src={person.profilePicture}/>}
+                    {person && !person.profilePicture && person.nickName &&
+                    <h2 className='profile-image-large large-name'>{person.nickName.charAt(0).toUpperCase()}</h2>}
+                    {person && person.nickName && <h1 className='my-text'>{person.nickName}</h1>}
+                    <label>Çevrimdışı olan kullanıcılar ile mesajlaşamazsınız. Kullanıcı yeniden aktif olduğu zaman
+                        dilediğiniz gibi konuşabilirsiniz. </label>
+                    <h1>ÇEVRİMDIŞI</h1>
+                </div>
             }
         } else {
             return <div className='my-page'>
-                <img className='profile-image' alt={my_info.name} src={my_info.img}/>
-                <h1 className='my-text'>{my_info.name}</h1>
-                <label>Lorem ipsum dolor sit amet, quot adolescens duo at, mel omittam maluisset ex. Eam homero
-                    inimicus ut, cotidieque contentiones in mea. Has ne omnis velit iuvaret. At omnes essent
-                    assueverit per, porro euripidis intellegebat ad vix. Cum illud pertinacia ut, et ius tempor
-                    primis indoctum, mea falli percipitur ea.</label>
+
+                {my_info.profilePicture ?
+                    <img className='profile-image' alt={my_info.nickName} src={my_info.profilePicture}/> :
+                    <h2 className='profile-image-large large-name'>{my_info.nickName.charAt(0).toUpperCase()}</h2>}
+                <h1 className='my-text'>{my_info.nickName}</h1>
+                <label>Cosean Mesajlaşma Uygulaması portalda bulunan kişilerle doya doya konuşmanı sağlamak için
+                    geliştirilmiştir. <a href={"http://cosean.me"}>Web sitemize</a> gidip diğer uygulamalarımızı
+                    görebilir. Bu tür geliştirimlerin devamı için bağışta bulunabilirsiniz.
+                    <hr/>Cosean Corp.<br/>Müslüm Sezgin - Anıl Coşar
+                </label>
+                <button className="pending" onClick={() => this.logout()}>Çıkış Yap</button>
             </div>
         }
     }
 
+    renderStatus(ip) {
+        const {onlineSet, pendingSet, requestSet, confirmSet} = this.state;
+        const online = onlineSet.find(item => item === ip);
+        if (online) {
+            if (pendingSet.find(item => item === ip))
+                return <i className="fa fa-bell lock" style={{right: "25px"}}/>
+            else if (requestSet.find(item => item === ip))
+                return <i className="fa fa-clock-o lock" style={{right: "26px", bottom: "29px"}}/>
+            else if (confirmSet.find(item => item === ip))
+                return <div className='green' style={{right: "26px"}}/>
+            return <i className="fa fa-lock lock" style={{right: "27px"}}/>
+        }
+        // return <div className='green' style={{right: "26px",borderColor:"#eee"}}/>
+    }
+
     render() {
-        const {value, talkId, userList, my_info, img} = this.state;
+        const {value, talkId, userSet, my_info, img, notificationSet} = this.state;
         if (my_info === null)
             return <div className='login my-page'>
                 <div>
                     <img className='profile-image' style={{position: 'absolute'}} alt='' src={img}/>
                     <div className="input-file-container">
                         <input className="input-file" id="my-file" type="file" accept="image/*"
-                               onChange={(e) => {
-                                   let reader = new FileReader();
-                                   let file = e.target.files[0];
-
-                                   reader.onloadend = () => {
-                                       this.setState({
-                                           file,
-                                           img: reader.result
-                                       });
-                                   };
-                                   reader.readAsDataURL(file)
-                               }}
-                        />
+                               onChange={(e) => this.pictureUpload(e.target.files[0])}/>
                         <h1 tabIndex="0" className="input-file-trigger">+</h1>
                     </div>
                     <p className="file-return"/>
                 </div>
                 <input
                     className='input'
-                    onKeyPress={e => e.key === 'Enter' && value.trim()
-                        && this.setState({
-                            my_info: {nickName: value, profilePicture:img},
-                            value: ''
-                        }, () => this.register())}
+                    onKeyPress={e => e.key === 'Enter' && value.trim() && this.setState({
+                        my_info: {
+                            nickName: value,
+                            profilePicture: img
+                        }, value: ''
+                    }, () => this.register())}
                     type='text'
                     value={value}
                     onChange={(e) => this.setState({value: e.currentTarget.value})}
-                    placeholder="nickname"
+                    placeholder="takma isim"
                     style={{margin: '20px'}}
                 />
                 <button className="pending"
                         onClick={() => value.trim() && this.setState({
-                            my_info: {nickName: value, profilePicture:img},
+                            my_info: {nickName: value, profilePicture: img},
                             value: ''
                         }, () => this.register())}>
-                    Enter
+                    Giriş
                 </button>
             </div>;
         return (
             <div className='content'>
                 <div className='list'>
-                    <div className='my'>
-                        <img className='profile-image' alt={my_info.nickName} src={my_info.img}/>
+                    <button className='my'
+                            onClick={() => this.setState({value: '', talkId: this.state.my_ip})}
+                    >
+                        {my_info.profilePicture ?
+                            <img className='profile-image' alt={my_info.nickName} src={my_info.profilePicture}/> :
+                            <label className='profile-image name'>{my_info.nickName.charAt(0).toUpperCase()}</label>}
                         <label className='my-text'>{my_info.nickName}</label>
-                    </div>
+                    </button>
 
                     <div className='other'>
-
-                        {Object.keys(userList).map((e, index) => e !== this.state.my_ip &&
+                        {Object.keys(userSet).map((e, index) => e !== this.state.my_ip &&
                             <button key={index} className={e === talkId ? 'button active' : 'button'}
-                                    onClick={() => this.setState({value: '', talkId: e})}
+                                    onClick={() => {
+                                        let notSet = notificationSet;
+                                        notSet.splice(notificationSet.indexOf(e), 1);
+                                        this.setState({value: '', talkId: e, notificationSet: notSet})
+                                    }}
                                     type="button">
-                                <img className={'profile-image' + (e === talkId ? ' online' : '')}
-                                     alt={userList[e].nickName}
-                                     src={userList[e].profilePicture}/>
-                                <label className='other-text'>{userList[e].nickName}</label>
+                                {notificationSet.find(n => e === n) && <i className="fa fa-envelope-o message-icon"/>}
+                                {userSet[e].profilePicture ?
+                                    <img className={'profile-image'} alt={userSet[e].nickName}
+                                         src={userSet[e].profilePicture}/> :
+                                    <label
+                                        className='profile-image name'>{userSet[e].nickName.charAt(0).toUpperCase()}</label>}
+                                <label className='other-text'>{userSet[e].nickName}</label>
                                 <div>
                                     <div className='online-img'/>
                                     {this.renderStatus(e)}
@@ -244,7 +270,6 @@ class App extends Component {
                             </button>
                         )}
                     </div>
-
                 </div>
                 <div className='messages' ref={el => this.messagesContainer = el}>{this.renderContent()}</div>
                 <div className='send'>
@@ -253,31 +278,12 @@ class App extends Component {
                            type='text'
                            value={value}
                            onChange={(e) => this.setState({value: e.currentTarget.value})}
-                           placeholder={"write a message..."}
+                           placeholder={"bir mesaj yaz..."}
                     />
-                    <button className='button-send' onClick={() => this._send()}>SEND</button>
+                    <button className='button-send' onClick={() => this._send()}>Gönder</button>
                 </div>
             </div>
         );
-    }
-
-    setFunc(item) {
-        const {onlineSet,pendingSet,requestSet,confirmSet,userSet}=item
-        this.setState({onlineSet,pendingSet,requestSet,confirmSet,userList:userSet})
-    }
-
-    renderStatus(ip) {
-        const { onlineSet, pendingSet, requestSet, confirmSet} = this.state;
-        const online = onlineSet.find(item => item === ip);
-        if(online){
-            if(pendingSet.find(item => item === ip))
-                return  <i className="fa fa-clock-o lock"/>
-            else if(requestSet.find(item => item === ip))
-                return  <i className="fa fa-clock-o lock"/>
-            else if(confirmSet.find(item => item === ip))
-                return  <i className="fa fa-lock lock"/>
-            return <div className='green'/>
-        }
     }
 }
 

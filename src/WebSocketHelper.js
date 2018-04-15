@@ -1,5 +1,5 @@
-export function emit(socket,ip,setFunc) {
-    let ws = new WebSocket(socket + ip);
+export function emit(socket,setFunc) {
+    let ws = new WebSocket(socket);
 
     ws.onopen = () =>(res => {
         if (ws.readyState === ws.OPEN) {
@@ -16,7 +16,7 @@ export function emit(socket,ip,setFunc) {
 
 
     ws.onmessage = (e) => {
-        console.log('message', e.data);
+        // console.log('message', e.data);
         setFunc(JSON.parse(e.data))
     };
 
@@ -26,4 +26,5 @@ export function emit(socket,ip,setFunc) {
     ws.onclose = (e) => {
         console.log('close ws')
     };
+    return ws;
 }

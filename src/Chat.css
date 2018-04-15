@@ -54,6 +54,37 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    position: relative;
+    border: none;
+    text-align: center;
+    -webkit-transition-duration: 0.4s; /* Safari */
+    transition-duration: 0.4s;
+    text-decoration: none;
+    overflow: hidden;
+    min-width: 100px;
+    cursor: pointer;
+    outline: none;
+}
+
+.my.active {
+    background: rgba(255, 255, 255, .2);
+}
+
+.my:before {
+    content: '';
+    background-color: #eee;
+    border-radius: 50%;
+    display: block;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    transform: scale(0.001, 0.001);
+}
+
+.my:focus:before {
+    animation: effect_dylan 0.8s ease-out;
 }
 
 .other {
@@ -104,28 +135,80 @@
     border-color: rgba(0, 0, 0, 0);
 }
 
+.profile-image-large {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    margin: 0 20px;
+    box-shadow: 0 0 10px 1px rgba(0,0,0, 0.4);
+    border-width: 2px;
+    border-style: solid;
+    border-color: rgba(0, 0, 0, 0);
+}
+
+.name {
+    width: 60px;
+    height: 60px;
+    color: #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: xx-large;
+    padding-bottom: 4px;
+    text-shadow: 1px 2px 2px rgba(0, 0, 0, 0.3);
+}
+
+.large-name {
+    color: #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 100px;
+    text-shadow: 1px 2px 2px rgba(0, 0, 0, 0.3);
+    padding-bottom: 10px;
+}
+
 .lock {
     position: absolute;
     bottom:28px;
-    right: 26px;
-    font-size: 11px;
+    font-size: 14px;
+    color: white;
+}
+
+.message-icon {
+    position: absolute;
+    top:5px;
+    left: 15px;
+    font-size: 12px;
+    color: white;
+    animation: pulse 2.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
 }
 
 .green {
     position: absolute;
-    width: 8px;
-    height: 8px;
-    border-width: 4px;
+    width: 12px;
+    height: 12px;
+    border-width: 6px;
     border-style: solid;
     border-color: #39D2B4;
     border-radius: 50%;
     bottom:30px;
     right: 26px;
 }
+
 .online-img {
     position: absolute;
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     bottom:28px;
     right: 24px;
     border-radius: 50%;
@@ -134,8 +217,6 @@
     border-color: rgba(0, 0, 0, 0);
     box-shadow: 0 0 10px 1px rgba(0,0,0, 0.4);
 }
-
-
 
 .messages {
     width: 100%;
@@ -150,12 +231,12 @@
 
 .my-page {
     width: 100%;
-    height: 100%;
     padding: 10px;
     display: flex;
     flex-direction: column;
     justify-content: center ;
     align-items: center;
+    padding-top: 50px;
 }
 .my-page img {
     width: 150px;
@@ -183,8 +264,6 @@
 }
 
 .send {
-    /*background: linear-gradient(0deg, #9E2C3D 00%, #eE364E 100%);*/
-    /*background: linear-gradient(0deg, #1E2C3D 00%, #3E364E 100%);*/
     background: linear-gradient(to right, #ee0979, #FFAA33);
     width: 100%;
     height: 60px;
@@ -243,11 +322,6 @@
     bottom: 0;
     left: 0;
     transform: scale(0.001, 0.001);
-}
-
-.button:focus {
-    outline: 0;
-    color: #fff;
 }
 
 .button:focus:before {
@@ -595,6 +669,4 @@ input:focus {
 }
 .file-return:not(:empty):before {
     content: "Selected file: ";
-
-
 }
