@@ -1,8 +1,11 @@
 import React, {Component} from 'react';
 import ReactDOM from 'react-dom';
 import './Chat.css';
+import {emit} from "./WebSocketHelper";
 
-const defaultMess = [
+var address = require('address');
+
+/*const defaultMess = [
     {
         text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
         me: true
@@ -43,7 +46,7 @@ const defaultMess = [
         text: 'wtf :/',
         me: true
     },
-];
+];*/
 
 const VisibleType = {
     LOCK: 0,
@@ -55,37 +58,18 @@ const VisibleType = {
 class App extends Component {
 
     state = {
+        my_ip:'',
         my_info: null,
         img: '',
         file: null,
         talkId: 0,
         value: '',
-        userList: {
-            1: {
-                img: 'https://cdnb.artstation.com/p/assets/images/images/001/863/575/large/irakli-nadar-artstation-da.jpg?1453903033',
-                name: 'Shuri',
-                messages: defaultMess,
-                status: 0
-            },
-            2: {
-                img: 'http://akns-images.eonline.com/eol_images/Entire_Site/201675/rs_300x300-160805111549-600-suicide-squad-margot-robbie.jpg?fit=around|700:700&crop=700:700;center,top&output-quality=100',
-                name: 'Margot',
-                messages: defaultMess,
-                status: 1
-            },
-            4: {
-                img: 'https://geekyapar.com/wp-content/uploads/2014/10/Scarlett-Johansson-hot-in-white-shirt.jpg',
-                name: 'Scarlett',
-                messages: [],
-                status: 2
-            },
-            5: {
-                img: 'https://specials-images.forbesimg.com/imageserve/dc687b7c5b56481d04dcfcdbe5723c66/416x416.jpg?background=000000&cropX1=2&cropX2=664&cropY1=6&cropY2=668',
-                name: 'Maria',
-                messages: [],
-                status: 3
-            },
-        }
+        onlineSet: [],
+        pendingSet: [],
+        requestSet: [],
+        confirmSet: [],
+        userList: {}
+
     };
 
     scrollToBottom = () => {
@@ -103,9 +87,13 @@ class App extends Component {
         this.scrollToBottom();
     }
 
+    componentWillMount(){
+
+    }
+
     _send() {
         const {value, talkId, userList} = this.state;
-        if (talkId !== 0 && userList[talkId].status === VisibleType.ONLINE && value.trim()) {
+        /*if (talkId !== 0 && userList[talkId].status === VisibleType.ONLINE && value.trim()) {
             this.setState({
                 userList: {
                     ...userList,
@@ -116,38 +104,63 @@ class App extends Component {
                 },
                 value: ''
             })
-        }
+        }*/
+    }
+
+    register = () => {
+        this.setState({loading: true});
+        let payload = {};
+        payload.method = 'POST';
+        payload.headers = {'Content-Type': 'application/json'};
+        payload.body = JSON.stringify(this.state.my_info);
+        // fetch('http://127.0.0.1:9093/api/v1/user', payload)
+        fetch('http://192.168.43.231:9093/api/v1/user', payload)
+            .then(res => res.text()).then(e => this.setState({my_ip:e, talkId:e},
+            () => emit("ws://192.168.43.231:9093/api/online/", this.state.my_ip, (item)=>this.setFunc(item))))
+            .catch(err => console.log("hata"))
+
     }
 
     renderContent() {
-        const {talkId, userList, my_info} = this.state;
-        const selected = talkId !== 0;
+        const {talkId, userList, my_info, onlineSet, pendingSet, requestSet, confirmSet, my_ip} = this.state;
+        const selected = talkId !== my_ip;
         if (selected) {
             const person = userList[talkId];
-            if (person.status === VisibleType.LOCK) {
-                return <div className='my-page'>
-                    <img className='profile-image' alt={person.name} src={person.img}/>
-                    <h1 className='my-text'>{person.name}</h1>
-                    <label>Hadi ne bekliyorsun! {person.name} kullanıcısına konuşma isteği göndermek için butona
-                        tıkla.</label>
-                    <button className="pending">Click me</button>
-                </div>
-            } else if (person.status === VisibleType.PENDING) {
-                return <div className='my-page'>
-                    <img className='profile-image' alt={person.name} src={person.img}/>
-                    <h1 className='my-text'>{person.name}</h1>
-                    <label>{person.name} kullanıcısına konuşma isteği gönderildi. Kabul ettikten sonra doya doya sohbet
-                        edebilirsin.</label>
-                </div>
-            } else {
-                return person.messages.length === 0 ? <div className='my-page'>
-                    <img className='profile-image' alt={person.name} src={person.img}/>
-                    <h1 className='my-text'>{person.name}</h1>
-                    <label>Hadi {person.name} için bir mesaj yaz...</label>
-                </div> : person.messages.map(e => <div
-                    className={e.me ? 'messages-li-me' : 'messages-li'}>{e.text}</div>)
+            const online = onlineSet.find(item => item === talkId);
+            if (online) {
+                if (confirmSet.find(item => item === talkId)) {
+                    return person.messages.length === 0 ? <div className='my-page'>
+                        <img className='profile-image' alt={person.name} src={person.img}/>
+                        <h1 className='my-text'>{person.name}</h1>
+                        <label>Hadi {person.name} için bir mesaj yaz...</label>
+                    </div> : person.messages.map(e => <div
+                        className={e.me ? 'messages-li-me' : 'messages-li'}>{e.text}</div>)
+                } else if (requestSet.find(item => item === talkId)) {
+                    return <div className='my-page'>
+                        <img className='profile-image' alt={person.name} src={person.img}/>
+                        <h1 className='my-text'>{person.name}</h1>
+                        <label>{person.name} kullanıcısına konuşma isteği gönderildi. Kabul ettikten sonra doya doya
+                            sohbet
+                            edebilirsin.</label>
+                    </div>
+                } else if (pendingSet.find(item => item === talkId)) {
+                    return <div className='my-page'>
+                        <img className='profile-image' alt={person.name} src={person.img}/>
+                        <h1 className='my-text'>{person.name}</h1>
+                        <label>{person.name} kullanıcısından isteğin var. Kabul ettikten sonra doya doya
+                            sohbet
+                            edebilirsin.</label>
+                    </div>
+                } else {
+                    return <div className='my-page'>
+                        <img className='profile-image' alt={person.name} src={person.img}/>
+                        <h1 className='my-text'>{person.name}</h1>
+                        <label>Hadi ne bekliyorsun! {person.name} kullanıcısına konuşma isteği göndermek için butona
+                            tıkla.</label>
+                        <button className="pending">Click me</button>
+                    </div>
+                }
             }
-
         } else {
             return <div className='my-page'>
                 <img className='profile-image' alt={my_info.name} src={my_info.img}/>
@@ -162,7 +175,6 @@ class App extends Component {
 
     render() {
         const {value, talkId, userList, my_info, img} = this.state;
-
         if (my_info === null)
             return <div className='login my-page'>
                 <div>
@@ -182,14 +194,17 @@ class App extends Component {
                                    reader.readAsDataURL(file)
                                }}
                         />
-                        <h1 tabindex="0" className="input-file-trigger">+</h1>
+                        <h1 tabIndex="0" className="input-file-trigger">+</h1>
                     </div>
                     <p className="file-return"/>
                 </div>
                 <input
                     className='input'
                     onKeyPress={e => e.key === 'Enter' && value.trim()
-                        && this.setState({my_info: {name: value, img}, value: ''})}
+                        && this.setState({
+                            my_info: {nickName: value, profilePicture:img},
+                            value: ''
+                        }, () => this.register())}
                     type='text'
                     value={value}
                     onChange={(e) => this.setState({value: e.currentTarget.value})}
@@ -197,32 +212,34 @@ class App extends Component {
                     style={{margin: '20px'}}
                 />
                 <button className="pending"
-                        onClick={() => value.trim() && this.setState({my_info: {name: value, img}, value: ''})}>
+                        onClick={() => value.trim() && this.setState({
+                            my_info: {nickName: value, profilePicture:img},
+                            value: ''
+                        }, () => this.register())}>
                     Enter
                 </button>
             </div>;
-
         return (
             <div className='content'>
                 <div className='list'>
                     <div className='my'>
-                        <img className='profile-image' alt={my_info.name} src={my_info.img}/>
-                        <label className='my-text'>{my_info.name}</label>
+                        <img className='profile-image' alt={my_info.nickName} src={my_info.img}/>
+                        <label className='my-text'>{my_info.nickName}</label>
                     </div>
 
                     <div className='other'>
-                        {Object.entries(userList).map(e =>
-                            <button className={e[0] === talkId ? 'button active' : 'button'}
-                                    onClick={() => this.setState({value: '', talkId: e[0]})}
+
+                        {Object.keys(userList).map((e, index) => e !== this.state.my_ip &&
+                            <button key={index} className={e === talkId ? 'button active' : 'button'}
+                                    onClick={() => this.setState({value: '', talkId: e})}
                                     type="button">
-                                <img className={'profile-image' + (e[0] === talkId ? ' online' : '')} alt={e[1].name}
-                                     src={e[1].img}/>
-                                <label className='other-text'>{e[1].name}</label>
+                                <img className={'profile-image' + (e === talkId ? ' online' : '')}
+                                     alt={userList[e].nickName}
+                                     src={userList[e].profilePicture}/>
+                                <label className='other-text'>{userList[e].nickName}</label>
                                 <div>
                                     <div className='online-img'/>
-                                    {e[1].status === VisibleType.LOCK && <i className="fa fa-lock lock"/>}
-                                    {e[1].status === VisibleType.PENDING && <i className="fa fa-clock-o lock"/>}
-                                    {e[1].status === VisibleType.ONLINE && <div className='green'/>}
+                                    {this.renderStatus(e)}
                                 </div>
                             </button>
                         )}
@@ -242,6 +259,25 @@ class App extends Component {
                 </div>
             </div>
         );
+    }
+
+    setFunc(item) {
+        const {onlineSet,pendingSet,requestSet,confirmSet,userSet}=item
+        this.setState({onlineSet,pendingSet,requestSet,confirmSet,userList:userSet})
+    }
+
+    renderStatus(ip) {
+        const { onlineSet, pendingSet, requestSet, confirmSet} = this.state;
+        const online = onlineSet.find(item => item === ip);
+        if(online){
+            if(pendingSet.find(item => item === ip))
+                return  <i className="fa fa-clock-o lock"/>
+            else if(requestSet.find(item => item === ip))
+                return  <i className="fa fa-clock-o lock"/>
+            else if(confirmSet.find(item => item === ip))
+                return  <i className="fa fa-lock lock"/>
+            return <div className='green'/>
+        }
     }
 }
 
